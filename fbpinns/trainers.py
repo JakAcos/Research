@@ -648,13 +648,33 @@ class FBPINNTrainer(_Trainer):
                 logger.info(f"[i: {i}/{self.c.n_steps}] Compiling update step..")
                 static_params_dynamic, static_params_static = partition(static_params)
                 update = FBPINN_update.lower(optimiser_fn, active_opt_states,
-                                             active_params, fixed_params, static_params_dynamic, static_params_static,
-                                             takess, constraints, model_fns, jmapss, loss_fn).compile()
+                             active_params, fixed_params, static_params_dynamic, static_params_static,
+                             takess, constraints, model_fns, jmapss, loss_fn).compile()
                 logger.info(f"[i: {i}/{self.c.n_steps}] Compiling done ({time.time()-startc:.2f} s)")
-                cost_ = update.cost_analysis()
-                p,f = total_size(active_params["network"]), cost_[0]["flops"] if (cost_ and "flops" in cost_[0]) else 0
-                logger.debug("p, f")
-                logger.debug((p,f))
+
+                # Get parameter count
+                p = total_size(active_params["network"])
+
+                # Safely extract flops
+                f = 0  # Default value
+                try:
+                    cost_ = update.cost_analysis()
+                    logger.debug(f"Cost analysis result: {cost_}")
+    
+                    if cost_:
+                        if isinstance(cost_, list) and cost_ and isinstance(cost_[0], dict) and "flops" in cost_[0]:
+                            f = cost_[0]["flops"]
+                        elif isinstance(cost_, dict):
+                            if 0 in cost_ and isinstance(cost_[0], dict) and "flops" in cost_[0]:
+                                f = cost_[0]["flops"]
+                            elif "flops" in cost_:
+                             f = cost_["flops"]
+                except Exception as e:
+                    logger.warning(f"Error in cost analysis: {e}")
+                     # Continue with default f = 0
+
+                logger.debug(f"Parameters: {p}, FLOPS: {f}")
+
 
             # report initial model
             if i == 0:
